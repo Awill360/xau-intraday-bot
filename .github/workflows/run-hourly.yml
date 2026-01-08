@@ -1,0 +1,33 @@
+# .github/workflows/run-hourly.yml
+name: XAU Intraday Bot (Hourly)
+
+on:
+  schedule:
+    - cron: '0 * * * *'   # exécute à hh:00 UTC
+  workflow_dispatch:      # permet un lancement manuel
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          TD_API_KEY:         ${{ secrets.TD_API_KEY }}
+          TIMEZONE_OFFSET:    ${{ secrets.TIMEZONE_OFFSET }}
+        run: |
+          python bot.py
