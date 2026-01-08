@@ -27,7 +27,7 @@ DONCHIAN_LEN  = 12       # 12 x 5 min = 1h (pack horaire)
 # --- Décision & risque ---
 CONFIDENCE_MAP     = {3:0.80, 2:0.60, 1:0.40, 0:0.00}
 ATR_LOW_PERCENTILE = 30
-SESSION_FILTER_ON  = False
+SESSION_FILTER_ON  = True
 SESSIONS_PARIS     = [(8,16), (14,22)]  # London & New York (Europe/Paris)
 
 SL_ATR_MULT = 1.5
