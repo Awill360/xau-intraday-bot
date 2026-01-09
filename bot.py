@@ -26,7 +26,7 @@ DONCHIAN_LEN  = 12       # 12 x 5 min = 1h (pack horaire)
 
 # --- Décision & risque ---
 CONFIDENCE_MAP     = {3:0.80, 2:0.60, 1:0.40, 0:0.00}
-ATR_LOW_PERCENTILE = 30
+ATR_LOW_PERCENTILE = 30          # gardé, mais seulement informatif
 SESSION_FILTER_ON  = True
 SESSIONS_PARIS     = [(8,16), (14,22)]  # London & New York (Europe/Paris)
 
@@ -158,7 +158,8 @@ def atr_series(highs, lows, closes, period=14):
 
 def percentile(values, p):
     vals = [v for v in values if v is not None]
-    if not vals: return None
+    if not vals:
+        return None
     vals.sort()
     k = int((p/100.0) * (len(vals)-1))
     return vals[k]
@@ -172,25 +173,35 @@ def last_pack_indices(n, pack_len=12):  # 12 x 5 min = 1h
 
 def score_trend(close, ema20, ema50, ema50_prev):
     slope_ema50 = ema50 - (ema50_prev if ema50_prev is not None else ema50)
-    if ema20 is None or ema50 is None: return 0
-    if ema20 > ema50 and close > ema20 and slope_ema50 >= 0: return +1
-    if ema20 < ema50 and close < ema20 and slope_ema50 <= 0: return -1
+    if ema20 is None or ema50 is None:
+        return 0
+    if ema20 > ema50 and close > ema20 and slope_ema50 >= 0:
+        return +1
+    if ema20 < ema50 and close < ema20 and slope_ema50 <= 0:
+        return -1
     return 0
 
 def score_momentum(rsi_curr, rsi_prev):
-    if rsi_curr is None or rsi_prev is None: return 0
-    if rsi_curr > 55 and rsi_curr > rsi_prev: return +1
-    if rsi_curr < 45 and rsi_curr < rsi_prev: return -1
+    if rsi_curr is None or rsi_prev is None:
+        return 0
+    if rsi_curr > 55 and rsi_curr > rsi_prev:
+        return +1
+    if rsi_curr < 45 and rsi_curr < rsi_prev:
+        return -1
     return 0
 
 def score_vol_structure(close, donchian_high, donchian_low, atr_curr, atr_median20):
-    if atr_curr is None or atr_median20 is None: return 0
+    if atr_curr is None or atr_median20 is None:
+        return 0
     expanding = atr_curr >= atr_median20
-    if expanding and donchian_high is not None and close >= donchian_high: return +1
-    if expanding and donchian_low  is not None and close <= donchian_low:  return -1
+    if expanding and donchian_high is not None and close >= donchian_high:
+        return +1
+    if expanding and donchian_low  is not None and close <= donchian_low:
+        return -1
     return 0
 
-def confidence(num_signals): return CONFIDENCE_MAP.get(num_signals, 0.0)
+def confidence(num_signals):
+    return CONFIDENCE_MAP.get(num_signals, 0.0)
 
 def in_sessions_paris(dt_paris):
     h = dt_paris.hour
@@ -231,13 +242,13 @@ def analyze_market_5m(candles):
     atr_window   = [atr_s[i] for i in range(start, last_idx+1)]
     atr_median20 = percentile(atr_window, 50)
 
-    close     = closes[last_idx]
-    ema20     = ema20_s[last_idx]
-    ema50     = ema50_s[last_idx]
-    ema50_prev= ema50_s[prev_idx]
-    rsi_curr  = rsi_s[last_idx]
-    rsi_prev  = rsi_s[prev_idx]
-    atr_curr  = atr_s[last_idx]
+    close      = closes[last_idx]
+    ema20      = ema20_s[last_idx]
+    ema50      = ema50_s[last_idx]
+    ema50_prev = ema50_s[prev_idx]
+    rsi_curr   = rsi_s[last_idx]
+    rsi_prev   = rsi_s[prev_idx]
+    atr_curr   = atr_s[last_idx]
 
     s1 = score_trend(close, ema20, ema50, ema50_prev)
     s2 = score_momentum(rsi_curr, rsi_prev)
@@ -245,21 +256,34 @@ def analyze_market_5m(candles):
     S = s1 + s2 + s3
     num_signals = sum(int(x != 0) for x in [s1, s2, s3])
 
-    # Filtre faible volatilité (ATR < p30 des 20 dernières barres)
+    # Faible volatilité (info uniquement)
     atr_vals_20 = [x for x in atr_window if x is not None]
     low_vol = False
     if atr_vals_20:
         atr_p30 = percentile(atr_vals_20, ATR_LOW_PERCENTILE)
         low_vol = (atr_curr is not None and atr_p30 is not None and atr_curr < atr_p30)
 
-    decision = "HOLD"
-    if not low_vol:
-        if S >= 2: decision = "BUY"
-        elif S <= -2: decision = "SELL"
+    # =========================
+    # LOGIQUE DE DÉCISION PLUS ACTIVE
+    # =========================
+    # Règle simple :
+    # - BUY si S >= 1
+    # - SELL si S <= -1
+    # - HOLD si S == 0
+    #
+    # On ne bloque plus sur low_vol, on laisse juste l'info dans le texte.
+    if S >= 1:
+        decision = "BUY"
+    elif S <= -1:
+        decision = "SELL"
+    else:
+        decision = "HOLD"
 
     conf = confidence(num_signals)
     sl = SL_ATR_MULT * atr_curr if atr_curr is not None else None
     tp = TP_ATR_MULT * atr_curr if atr_curr is not None else None
+
+    low_vol_text = "Oui" if low_vol else "Non"
 
     text = (
         f"[{SYMBOL} - Décision horaire (5m pack x12)]\n"
@@ -267,7 +291,7 @@ def analyze_market_5m(candles):
         f"Scores → Trend:{s1} Momentum:{s2} Vol/Struct:{s3} (S={S})\n"
         f"Close: {close:.2f} | EMA20: {ema20:.2f} | EMA50: {ema50:.2f}\n"
         f"Donchian(12) High/Low: {donchian_high:.2f} / {donchian_low:.2f}\n"
-        f"ATR14: {atr_curr:.4f} | Median20: {atr_median20:.4f}\n"
+        f"ATR14: {atr_curr:.4f} | Median20: {atr_median20:.4f} | LowVol: {low_vol_text}\n"
         f"SL≈ {sl:.4f} | TP≈ {tp:.4f}"
     )
     return {"decision": decision, "confidence": conf, "text": text}
