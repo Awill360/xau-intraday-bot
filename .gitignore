@@ -1,0 +1,8 @@
+# Empêche les fichiers d'environnement d'être commités
+.env
+*.env
+
+# Fichiers sensibles ou temporaires
+__pycache__/
+*.pyc
+*.log
